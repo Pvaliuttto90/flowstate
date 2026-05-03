@@ -29,6 +29,9 @@ S1 in progress. Complete:
 - `IntentInput` React component — submits intent, displays spec id and status
 - Structured JSON logging on all `/intent` requests (success + error paths)
 
+## Integrations Philosophy
+FlowState accepts pasted code from AI design tools as a first-class intent type. Supported sources include Stitch (Google), v0 (Vercel), and similar tools. No direct integration needed — users paste generated code as a code intent.
+
 ## Decisions Log
 - 2026-05-03: Scaffolded React + Vite frontend and Hono backend
 - 2026-05-03: Server running on 3001, frontend on 5173
