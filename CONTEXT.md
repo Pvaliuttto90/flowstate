@@ -20,9 +20,14 @@ Intent → Tests → Code → Reviewed PR
 1. Tests before implementation — always
 2. Every AI action is auditable
 3. No feature ships without a spec
+4. All API actions log structured JSON with full input/output context
 
 ## Current Work
-S1 scaffolding complete. Frontend and backend running locally.
+S1 in progress. Complete:
+- `POST /intent` endpoint (Hono) → calls `createSpec`, returns spec object
+- `createSpec` — validates intent, returns `{ id, intent, status, createdAt }`
+- `IntentInput` React component — submits intent, displays spec id and status
+- Structured JSON logging on all `/intent` requests (success + error paths)
 
 ## Decisions Log
 - 2026-05-03: Scaffolded React + Vite frontend and Hono backend
