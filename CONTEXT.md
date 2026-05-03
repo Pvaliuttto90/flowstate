@@ -27,4 +27,3 @@ S1 scaffolding complete. Frontend and backend running locally.
 ## Decisions Log
 - 2026-05-03: Scaffolded React + Vite frontend and Hono backend
 - 2026-05-03: Server running on 3001, frontend on 5173
-
