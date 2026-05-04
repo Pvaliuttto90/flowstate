@@ -2,36 +2,52 @@
 
 ## What Was Built This Session
 
-### Anthropic API Integration
-- **`server/ai.js`** — `generateSpec(intent)` calls `claude-sonnet-4-6` with a system prompt asking for a JSON object `{ acceptanceCriteria: string[], suggestedTests: string[] }`. Result is spread into the POST /intent response alongside the DB row.
+### POST /tests/generate — Tests Phase of S1
 
-### Postgres + Drizzle Persistence
-- **`server/db/schema.js`** — `specs` table: `id` (UUID PK), `intent` (text), `type` (text, default 'text'), `status` (text, default 'pending'), `acceptanceCriteria` (jsonb), `suggestedTests` (jsonb), `userId` (text), `createdAt` (timestamp)
-- **`server/db/index.js`** — Drizzle client via `postgres-js`, reads `DATABASE_URL` from env, exports `db` and `specs`
-- **`server/drizzle.config.js`** + migrations in `server/drizzle/` — committed and applied to local Postgres
-- **`server/intent.js`** — `createSpec(intent, { userId } = {})` now async; inserts into DB and returns the saved row
+Given a `specId`, loads `suggestedTests` from Postgres, sends them to Claude to expand into Vitest test stubs, persists the result, and returns it. This closes the Tests phase of the S1 Core Loop.
 
-### Clerk Auth
-- **`server/app.js`** — Clerk middleware at top of `POST /intent`: extracts `Authorization: Bearer <token>`, calls `clerkClient.verifyToken(token)`, returns 401 on missing or invalid token. `userId` from `payload.sub` is passed to `createSpec`.
-- **`src/main.jsx`** — `ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}` wraps `App`
-- **`src/App.jsx`** — `SignedOut` renders `SignInButton`; `SignedIn` renders `UserButton` + `IntentInput`
-- **`src/components/IntentInput.jsx`** — `const { getToken } = useAuth()`, fetches token before submit, sends `Authorization: Bearer <token>` header
+#### New source files
 
-### Tests (18 passing)
-All DB calls mocked with Drizzle fluent chain pattern. All Clerk calls mocked.
+- **`server/generate-tests.js`** — `generateTests(suggestedTests: string[])` calls `claude-sonnet-4-6` with a numbered list of test scenarios. System prompt instructs Claude to return a plain Vitest file (no markdown fences), one `it()` stub per scenario with `expect.fail('not implemented')`. Returns the raw string.
+
+- **`server/spec.js`** — Two DB helpers:
+  - `getSpec(specId)` — `db.select().from(specs).where(eq(specs.id, specId))`, returns row or `null`
+  - `saveGeneratedTests(specId, stubs)` — `db.update(specs).set({ generatedTests: stubs }).where(eq(specs.id, specId)).returning()`, returns updated row
+
+#### Changed files
+
+- **`server/app.js`** — `POST /tests/generate` route added (Clerk-protected, same Bearer token pattern as `/intent`):
+  - 401: missing/invalid token
+  - 400: `specId` missing from body
+  - 404: spec not found in DB
+  - 400: `spec.suggestedTests` is empty array
+  - On success: calls `generateTests` → `saveGeneratedTests` → logs → returns `{ specId, testStubs }` (200)
+  - AI/DB errors return 500
+
+- **`server/db/schema.js`** — added `generatedTests: text('generated_tests')` (nullable, no default)
+
+#### Migration
+
+No drizzle-kit. Column added directly:
+```bash
+docker exec flowstate-db psql -U postgres -d flowstate -c "ALTER TABLE specs ADD COLUMN IF NOT EXISTS generated_tests text;"
+```
+
+#### Tests (29 passing — 11 new)
 
 | File | Tests |
 |---|---|
-| `server/tests/intent.route.test.js` | 201 valid, 400 empty, 400 missing, AI fields, **401 no token**, **401 bad token** |
-| `server/tests/logging.test.js` | success log, error log, code truncation, short code, error+code |
-| `server/tests/ai.test.js` | returns arrays, includes intent in Claude request |
-| `src/tests/IntentInput.test.jsx` | renders, POSTs **with Authorization header** |
+| `server/tests/generate-tests.test.js` | returns string with `it(`, includes all scenarios in Claude request |
+| `server/tests/spec.test.js` | getSpec returns row / null; saveGeneratedTests returns updated row |
+| `server/tests/tests-generate.route.test.js` | 200 valid, 401×2, 400 missing specId, 404 not found, 400 empty tests |
+
+Also updated `intent.route.test.js` and `logging.test.js` — both needed two new mocks because `app.js` now imports `generate-tests.js` (Anthropic client at module load) and `spec.js`.
 
 ---
 
 ## Critical Mock Patterns
 
-### Drizzle chain mock (all files that import `app.js` or `intent.js`)
+### Drizzle INSERT chain (intent.route.test.js, logging.test.js)
 ```js
 const mockDbValues = vi.hoisted(() => vi.fn())
 const mockDbInsert = vi.hoisted(() => vi.fn())
@@ -51,9 +67,39 @@ mockDbValues.mockImplementation((vals) => ({
   }]),
 }))
 ```
-The `...vals` spread is essential — it makes the returned row echo back the `intent` that was inserted, so route tests can assert `body.intent`.
 
-### Clerk backend mock (all files that import `app.js`)
+### Drizzle SELECT chain (spec.test.js)
+```js
+const mockDbSelect = vi.hoisted(() => vi.fn())
+const mockDbFrom = vi.hoisted(() => vi.fn())
+const mockDbWhere = vi.hoisted(() => vi.fn())
+
+vi.mock('../db/index.js', () => ({
+  db: { select: mockDbSelect, update: mockDbUpdate },
+  specs: {},
+}))
+
+// in beforeEach:
+mockDbSelect.mockReturnValue({ from: mockDbFrom })
+mockDbFrom.mockReturnValue({ where: mockDbWhere })
+mockDbWhere.mockResolvedValue([{ ...row }])  // or [] for not-found
+```
+
+### Drizzle UPDATE chain (spec.test.js)
+```js
+const mockDbUpdate = vi.hoisted(() => vi.fn())
+const mockDbUpdateSet = vi.hoisted(() => vi.fn())
+const mockDbUpdateWhere = vi.hoisted(() => vi.fn())
+const mockDbUpdateReturning = vi.hoisted(() => vi.fn())
+
+// in beforeEach:
+mockDbUpdate.mockReturnValue({ set: mockDbUpdateSet })
+mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere })
+mockDbUpdateWhere.mockReturnValue({ returning: mockDbUpdateReturning })
+mockDbUpdateReturning.mockResolvedValue([{ ...updatedRow }])
+```
+
+### Clerk backend mock (all files importing app.js)
 ```js
 const mockVerifyToken = vi.hoisted(() => vi.fn())
 
@@ -64,7 +110,16 @@ vi.mock('@clerk/backend', () => ({
 // in beforeEach:
 mockVerifyToken.mockResolvedValue({ sub: 'user_test' })
 ```
-`createClerkClient` is called at module load in `app.js`, so the mock must be hoisted before the import.
+
+### Any new test file that imports app.js needs ALL of these mocks
+```js
+vi.mock('../db/index.js', () => ({ db: { insert: vi.fn() }, specs: {} }))
+vi.mock('../ai.js', () => ({ generateSpec: vi.fn() }))
+vi.mock('../generate-tests.js', () => ({ generateTests: vi.fn() }))
+vi.mock('../spec.js', () => ({ getSpec: vi.fn(), saveGeneratedTests: vi.fn() }))
+vi.mock('@clerk/backend', () => ({ createClerkClient: () => ({ verifyToken: mockVerifyToken }) }))
+```
+`app.js` instantiates `Anthropic` (via `generate-tests.js`) and `postgres` (via `db/index.js`) at module load — without these mocks the test blows up in CI with "browser-like environment" or DB connection errors.
 
 ### Clerk React mock (frontend tests)
 ```js
@@ -90,29 +145,33 @@ mockGetToken.mockResolvedValue('test-token')
 
 Neither `.env` file is committed. CI doesn't need them — all external calls are mocked.
 
+Docker container: `flowstate-db` (postgres image).
+
 ---
 
 ## Lessons Learned This Session
 
-**1. Always commit package files in the same commit as the code that uses them.**
-When installing a new npm package, `package.json` + `package-lock.json` (root and/or server) must be committed alongside the code. CI installs strictly from `package.json` — if a package isn't listed there, CI fails with module-not-found even though tests pass locally. This bit us twice: once with Drizzle, once with `@clerk/clerk-react` and `@clerk/backend`.
+**1. Any new file that creates an Anthropic client or Postgres client at module load must be mocked in every test file that imports `app.js`.**
+`app.js` imports grow as routes are added. Each new route's service file may have module-level side effects (Anthropic SDK throws in jsdom; postgres tries to connect). The complete mock list at the bottom of the "Critical Mock Patterns" section above must be kept current as new service files are added.
 
-**2. Any new test file that imports `app.js` or `intent.js` needs both the `@clerk/backend` mock and the `db/index.js` mock using `vi.hoisted`.**
-`app.js` calls `createClerkClient(...)` at module load time, and `intent.js` calls `db.insert(...)` at call time. Without both mocks hoisted before the import, the real Clerk client and the real Postgres connection attempt to initialize, blowing up in CI (no secrets, no DB). See the mock patterns section above for the exact boilerplate.
+**2. Drizzle SELECT and UPDATE chains need separate hoisted mocks for each step.**
+Unlike INSERT (which returns a plain object with `.returning()` as a non-mock function), SELECT and UPDATE chains need every step to be a `vi.hoisted` fn so you can vary return values per test (e.g., return `[]` for the 404 case). See the chain patterns above.
+
+**3. Skip drizzle-kit for column additions — use `docker exec psql ALTER TABLE IF NOT EXISTS` directly.**
+Faster and avoids generating a migration file for a simple nullable column add.
 
 ---
 
 ## What's Next (S1 remaining)
 
-1. **Test generation step** — `POST /tests/generate`: accepts `specId`, looks up the spec's `suggestedTests`, calls Anthropic API to expand them into runnable Vitest test stubs, persists and returns the result. This is the "Tests" phase of the S1 Core Loop.
-2. **Code generation step** — given spec + approved tests, generate implementation via Anthropic API.
-3. **PR summary step** — bundle spec + tests + code into a reviewed PR object.
+1. **Code generation step** — `POST /code/generate`: accepts `specId`, loads `generatedTests` from the spec, calls Claude to generate implementation that would make those tests pass, persists and returns the result.
+2. **PR summary step** — `POST /pr/summarize`: bundles spec + tests + code into a reviewed PR description object.
 
 ---
 
 ## Repo State
 
-- Branch: `main`, all work committed and pushed
-- Tests: 5 files, 18 tests, all passing
-- CI: green on last push (`6525645`)
-- Local DB: Postgres running, `flowstate` database exists, `specs` table migrated
+- Branch: `main`, all work committed (`74adf7c`)
+- Tests: 8 files, 29 tests, all passing
+- CI: should be green (no new packages installed)
+- Local DB: `flowstate-db` container, `specs` table has `generated_tests` column
