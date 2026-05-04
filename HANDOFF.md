@@ -92,9 +92,13 @@ Neither `.env` file is committed. CI doesn't need them — all external calls ar
 
 ---
 
-## Gotcha: Always Commit Package Files
+## Lessons Learned This Session
 
-When installing a new npm package, commit `package.json` + `package-lock.json` (root and/or server) in the same commit as the code that uses it. CI has no other way to know the package exists. This bit us this session — `@clerk/clerk-react` and `@clerk/backend` were installed locally but not committed, causing CI to fail with module-not-found errors.
+**1. Always commit package files in the same commit as the code that uses them.**
+When installing a new npm package, `package.json` + `package-lock.json` (root and/or server) must be committed alongside the code. CI installs strictly from `package.json` — if a package isn't listed there, CI fails with module-not-found even though tests pass locally. This bit us twice: once with Drizzle, once with `@clerk/clerk-react` and `@clerk/backend`.
+
+**2. Any new test file that imports `app.js` or `intent.js` needs both the `@clerk/backend` mock and the `db/index.js` mock using `vi.hoisted`.**
+`app.js` calls `createClerkClient(...)` at module load time, and `intent.js` calls `db.insert(...)` at call time. Without both mocks hoisted before the import, the real Clerk client and the real Postgres connection attempt to initialize, blowing up in CI (no secrets, no DB). See the mock patterns section above for the exact boilerplate.
 
 ---
 
