@@ -13,6 +13,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@hono/node-server": "^2.0.1",
-    "hono": "^4.12.16"
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.16",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10"
   }
 }
