@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto'
+import { db, specs } from './db/index.js'
 
-export function createSpec(intent) {
+export async function createSpec(intent) {
   if (!intent) throw new Error('Intent must not be empty')
-  return {
+  const [row] = await db.insert(specs).values({
     id: randomUUID(),
     intent,
     status: 'pending',
-    createdAt: new Date(),
-  }
+  }).returning()
+  return row
 }

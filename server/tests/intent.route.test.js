@@ -1,5 +1,12 @@
-import { vi, describe, it, expect } from 'vitest'
-import app from '../app.js'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
+
+const mockDbValues = vi.hoisted(() => vi.fn())
+const mockDbInsert = vi.hoisted(() => vi.fn())
+
+vi.mock('../db/index.js', () => ({
+  db: { insert: mockDbInsert },
+  specs: {},
+}))
 
 vi.mock('../ai.js', () => ({
   generateSpec: vi.fn().mockResolvedValue({
@@ -8,7 +15,26 @@ vi.mock('../ai.js', () => ({
   }),
 }))
 
+import app from '../app.js'
+
 describe('POST /intent', () => {
+  beforeEach(() => {
+    mockDbInsert.mockReturnValue({ values: mockDbValues })
+    mockDbValues.mockImplementation((vals) => ({
+      returning: () =>
+        Promise.resolve([{
+          id: 'test-uuid',
+          type: 'text',
+          status: 'pending',
+          acceptanceCriteria: [],
+          suggestedTests: [],
+          userId: null,
+          createdAt: new Date('2026-05-04'),
+          ...vals,
+        }]),
+    }))
+  })
+
   it('returns a spec for a valid intent', async () => {
     const res = await app.request('/intent', {
       method: 'POST',

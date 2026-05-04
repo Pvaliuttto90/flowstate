@@ -11,7 +11,7 @@ app.post('/intent', async (c) => {
   const { intent, code } = await c.req.json()
   const truncated = code !== undefined ? { code: code.slice(0, 200) } : {}
   try {
-    const spec = createSpec(intent)
+    const spec = await createSpec(intent)
     const aiDetails = await generateSpec(intent)
     log({ level: 'info', intent, ...truncated, specId: spec.id, status: spec.status })
     return c.json({ ...spec, ...aiDetails }, 201)

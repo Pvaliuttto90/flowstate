@@ -1,22 +1,57 @@
-import { describe, it, expect } from 'vitest'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
+
+const mockValues = vi.hoisted(() => vi.fn())
+const mockInsert = vi.hoisted(() => vi.fn())
+
+vi.mock('../../server/db/index.js', () => ({
+  db: { insert: mockInsert },
+  specs: {},
+}))
+
 import { createSpec } from '../../server/intent.js'
 
 describe('Intent → Spec', () => {
-  it('creates a spec object from a user intent string', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockInsert.mockReturnValue({ values: mockValues })
+    mockValues.mockImplementation((vals) => ({
+      returning: () =>
+        Promise.resolve([{
+          id: 'test-uuid',
+          type: 'text',
+          status: 'pending',
+          acceptanceCriteria: [],
+          suggestedTests: [],
+          userId: null,
+          createdAt: new Date('2026-05-04'),
+          ...vals,
+        }]),
+    }))
+  })
+
+  it('inserts the spec into the database and returns the saved row', async () => {
     const intent = 'Add a login page with email and password fields'
 
-    const spec = createSpec(intent)
+    const spec = await createSpec(intent)
 
+    expect(mockInsert).toHaveBeenCalledOnce()
     expect(spec).toMatchObject({
       id: expect.any(String),
       intent,
       status: 'pending',
       createdAt: expect.any(Date),
     })
-    expect(spec.id.length).toBeGreaterThan(0)
   })
 
-  it('rejects an empty intent', () => {
-    expect(() => createSpec('')).toThrow('Intent must not be empty')
+  it('includes the intent in the inserted row', async () => {
+    await createSpec('Build a dashboard')
+
+    const [insertedValues] = mockValues.mock.calls[0]
+    expect(insertedValues.intent).toBe('Build a dashboard')
+  })
+
+  it('rejects an empty intent without touching the database', async () => {
+    await expect(createSpec('')).rejects.toThrow('Intent must not be empty')
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 })
