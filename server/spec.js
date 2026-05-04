@@ -21,3 +21,11 @@ export async function saveGeneratedCode(specId, code) {
     .returning()
   return row
 }
+
+export async function savePRSummary(specId, prSummary) {
+  const [row] = await db.update(specs)
+    .set({ prSummary })
+    .where(eq(specs.id, specId))
+    .returning()
+  return row
+}

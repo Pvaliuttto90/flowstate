@@ -21,7 +21,10 @@ vi.mock('../spec.js', () => ({
   getSpec: mockGetSpec,
   saveGeneratedTests: vi.fn(),
   saveGeneratedCode: mockSaveGeneratedCode,
+  savePRSummary: vi.fn(),
 }))
+
+vi.mock('../generate-pr.js', () => ({ generatePR: vi.fn() }))
 
 vi.mock('../generate-code.js', () => ({
   generateCode: mockGenerateCode,

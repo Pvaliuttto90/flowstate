@@ -18,7 +18,8 @@ vi.mock('../ai.js', () => ({
 
 vi.mock('../generate-tests.js', () => ({ generateTests: vi.fn() }))
 vi.mock('../generate-code.js', () => ({ generateCode: vi.fn() }))
-vi.mock('../spec.js', () => ({ getSpec: vi.fn(), saveGeneratedTests: vi.fn(), saveGeneratedCode: vi.fn() }))
+vi.mock('../generate-pr.js', () => ({ generatePR: vi.fn() }))
+vi.mock('../spec.js', () => ({ getSpec: vi.fn(), saveGeneratedTests: vi.fn(), saveGeneratedCode: vi.fn(), savePRSummary: vi.fn() }))
 
 vi.mock('@clerk/backend', () => ({
   createClerkClient: () => ({ verifyToken: mockVerifyToken }),

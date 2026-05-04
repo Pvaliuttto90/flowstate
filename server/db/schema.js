@@ -10,5 +10,6 @@ export const specs = pgTable('specs', {
   userId: text('user_id'),
   generatedTests: text('generated_tests'),
   generatedCode: text('generated_code'),
+  prSummary: jsonb('pr_summary'),
   createdAt: timestamp('created_at').defaultNow()
 })
