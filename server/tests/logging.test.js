@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 const mockDbValues = vi.hoisted(() => vi.fn())
 const mockDbInsert = vi.hoisted(() => vi.fn())
+const mockVerifyToken = vi.hoisted(() => vi.fn())
 
 vi.mock('../db/index.js', () => ({
   db: { insert: mockDbInsert },
@@ -15,12 +16,17 @@ vi.mock('../ai.js', () => ({
   }),
 }))
 
+vi.mock('@clerk/backend', () => ({
+  createClerkClient: () => ({ verifyToken: mockVerifyToken }),
+}))
+
 import app from '../app.js'
 
 describe('POST /intent — structured logging', () => {
   let spy
 
   beforeEach(() => {
+    mockVerifyToken.mockResolvedValue({ sub: 'user_test' })
     spy = vi.spyOn(console, 'log').mockImplementation(() => {})
     mockDbInsert.mockReturnValue({ values: mockDbValues })
     mockDbValues.mockImplementation((vals) => ({
@@ -45,7 +51,7 @@ describe('POST /intent — structured logging', () => {
   it('logs intent, spec id, and status on success', async () => {
     await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: 'Add a dashboard page' }),
     })
 
@@ -64,7 +70,7 @@ describe('POST /intent — structured logging', () => {
   it('logs intent and full error context on failure', async () => {
     await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: '' }),
     })
 
@@ -84,7 +90,7 @@ describe('POST /intent — structured logging', () => {
 
     await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: 'Add a login page', code }),
     })
 
@@ -104,7 +110,7 @@ describe('POST /intent — structured logging', () => {
 
     await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: 'Add a login page', code }),
     })
 
@@ -117,7 +123,7 @@ describe('POST /intent — structured logging', () => {
 
     await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: '', code }),
     })
 

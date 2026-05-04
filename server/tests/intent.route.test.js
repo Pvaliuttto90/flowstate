@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const mockDbValues = vi.hoisted(() => vi.fn())
 const mockDbInsert = vi.hoisted(() => vi.fn())
+const mockVerifyToken = vi.hoisted(() => vi.fn())
 
 vi.mock('../db/index.js', () => ({
   db: { insert: mockDbInsert },
@@ -15,10 +16,15 @@ vi.mock('../ai.js', () => ({
   }),
 }))
 
+vi.mock('@clerk/backend', () => ({
+  createClerkClient: () => ({ verifyToken: mockVerifyToken }),
+}))
+
 import app from '../app.js'
 
 describe('POST /intent', () => {
   beforeEach(() => {
+    mockVerifyToken.mockResolvedValue({ sub: 'user_test' })
     mockDbInsert.mockReturnValue({ values: mockDbValues })
     mockDbValues.mockImplementation((vals) => ({
       returning: () =>
@@ -38,7 +44,7 @@ describe('POST /intent', () => {
   it('returns a spec for a valid intent', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: 'Add a login page with email and password' }),
     })
 
@@ -55,7 +61,7 @@ describe('POST /intent', () => {
   it('returns 400 when intent is empty', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: '' }),
     })
 
@@ -67,7 +73,7 @@ describe('POST /intent', () => {
   it('returns 400 when intent field is missing', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({}),
     })
 
@@ -79,7 +85,7 @@ describe('POST /intent', () => {
   it('response includes acceptanceCriteria and suggestedTests from the AI', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
       body: JSON.stringify({ intent: 'Add a dashboard page' }),
     })
 
@@ -89,5 +95,26 @@ describe('POST /intent', () => {
     expect(body.acceptanceCriteria.length).toBeGreaterThan(0)
     expect(body.suggestedTests).toBeInstanceOf(Array)
     expect(body.suggestedTests.length).toBeGreaterThan(0)
+  })
+
+  it('returns 401 when Authorization header is missing', async () => {
+    const res = await app.request('/intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intent: 'Add a login page' }),
+    })
+
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 401 when token is invalid', async () => {
+    mockVerifyToken.mockRejectedValueOnce(new Error('Invalid token'))
+    const res = await app.request('/intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer bad-token' },
+      body: JSON.stringify({ intent: 'Add a login page' }),
+    })
+
+    expect(res.status).toBe(401)
   })
 })

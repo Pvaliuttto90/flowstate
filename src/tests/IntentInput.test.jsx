@@ -1,6 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+
+const mockGetToken = vi.hoisted(() => vi.fn())
+
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({ getToken: mockGetToken }),
+}))
+
 import IntentInput from '../components/IntentInput.jsx'
 
 const mockSpec = {
@@ -14,6 +21,7 @@ describe('IntentInput', () => {
   let mockFetch
 
   beforeEach(() => {
+    mockGetToken.mockResolvedValue('test-token')
     mockFetch = vi.fn()
     vi.stubGlobal('fetch', mockFetch)
   })
@@ -42,7 +50,10 @@ describe('IntentInput', () => {
 
     expect(mockFetch).toHaveBeenCalledWith('/intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token',
+      },
       body: JSON.stringify({ intent: 'Add a login page' }),
     })
 

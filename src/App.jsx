@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react'
+import IntentInput from './components/IntentInput.jsx'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
@@ -16,10 +18,14 @@ function App() {
           <img src={viteLogo} className="vite" alt="Vite logo" />
         </div>
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+          <h1>FlowState</h1>
+          <SignedOut>
+            <SignInButton />
+          </SignedOut>
+          <SignedIn>
+            <UserButton />
+            <IntentInput />
+          </SignedIn>
         </div>
         <button
           type="button"
