@@ -16,6 +16,9 @@ vi.mock('../ai.js', () => ({
   }),
 }))
 
+vi.mock('../generate-tests.js', () => ({ generateTests: vi.fn() }))
+vi.mock('../spec.js', () => ({ getSpec: vi.fn(), saveGeneratedTests: vi.fn() }))
+
 vi.mock('@clerk/backend', () => ({
   createClerkClient: () => ({ verifyToken: mockVerifyToken }),
 }))

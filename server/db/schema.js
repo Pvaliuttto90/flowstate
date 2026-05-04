@@ -8,5 +8,6 @@ export const specs = pgTable('specs', {
   acceptanceCriteria: jsonb('acceptance_criteria').default([]),
   suggestedTests: jsonb('suggested_tests').default([]),
   userId: text('user_id'),
+  generatedTests: text('generated_tests'),
   createdAt: timestamp('created_at').defaultNow()
 })
