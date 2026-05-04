@@ -2,8 +2,9 @@ import { Hono } from 'hono'
 import { createClerkClient } from '@clerk/backend'
 import { createSpec } from './intent.js'
 import { generateSpec } from './ai.js'
-import { getSpec, saveGeneratedTests } from './spec.js'
+import { getSpec, saveGeneratedTests, saveGeneratedCode } from './spec.js'
 import { generateTests } from './generate-tests.js'
+import { generateCode } from './generate-code.js'
 import { log } from './logger.js'
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
@@ -66,6 +67,38 @@ app.post('/tests/generate', async (c) => {
     return c.json({ specId, testStubs }, 200)
   } catch (err) {
     log({ level: 'error', specId, action: 'generate-tests', error: err.message })
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+app.post('/code/generate', async (c) => {
+  const authHeader = c.req.header('Authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return c.json({ error: 'Unauthorized' }, 401)
+
+  try {
+    await clerkClient.verifyToken(token)
+  } catch {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const { specId } = await c.req.json()
+  if (!specId) return c.json({ error: 'specId is required' }, 400)
+
+  const spec = await getSpec(specId)
+  if (!spec) return c.json({ error: 'Spec not found' }, 404)
+
+  if (!spec.generatedTests) {
+    return c.json({ error: 'Tests have not been generated for this spec' }, 400)
+  }
+
+  try {
+    const code = await generateCode(spec.intent, spec.acceptanceCriteria, spec.generatedTests)
+    await saveGeneratedCode(specId, code)
+    log({ level: 'info', specId, action: 'generate-code' })
+    return c.json({ specId, code }, 200)
+  } catch (err) {
+    log({ level: 'error', specId, action: 'generate-code', error: err.message })
     return c.json({ error: err.message }, 500)
   }
 })

@@ -13,3 +13,11 @@ export async function saveGeneratedTests(specId, stubs) {
     .returning()
   return row
 }
+
+export async function saveGeneratedCode(specId, code) {
+  const [row] = await db.update(specs)
+    .set({ generatedCode: code })
+    .where(eq(specs.id, specId))
+    .returning()
+  return row
+}

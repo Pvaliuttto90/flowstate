@@ -9,5 +9,6 @@ export const specs = pgTable('specs', {
   suggestedTests: jsonb('suggested_tests').default([]),
   userId: text('user_id'),
   generatedTests: text('generated_tests'),
+  generatedCode: text('generated_code'),
   createdAt: timestamp('created_at').defaultNow()
 })

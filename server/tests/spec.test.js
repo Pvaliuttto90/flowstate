@@ -16,7 +16,7 @@ vi.mock('../db/index.js', () => ({
   specs: {},
 }))
 
-import { getSpec, saveGeneratedTests } from '../spec.js'
+import { getSpec, saveGeneratedTests, saveGeneratedCode } from '../spec.js'
 
 const SPEC = {
   id: 'spec-uuid',
@@ -68,5 +68,22 @@ describe('saveGeneratedTests', () => {
     const result = await saveGeneratedTests('spec-uuid', 'stub content')
 
     expect(result).toMatchObject({ id: 'spec-uuid', generatedTests: 'stub content' })
+  })
+})
+
+describe('saveGeneratedCode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockDbUpdate.mockReturnValue({ set: mockDbUpdateSet })
+    mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere })
+    mockDbUpdateWhere.mockReturnValue({ returning: mockDbUpdateReturning })
+  })
+
+  it('saves and returns the updated spec row', async () => {
+    mockDbUpdateReturning.mockResolvedValue([{ ...SPEC, generatedCode: 'export function x() {}' }])
+
+    const result = await saveGeneratedCode('spec-uuid', 'export function x() {}')
+
+    expect(result).toMatchObject({ id: 'spec-uuid', generatedCode: 'export function x() {}' })
   })
 })
