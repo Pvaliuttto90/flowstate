@@ -1,137 +1,176 @@
 # FlowState — Handoff (2026-05-04)
 
-## What Was Built This Session
+## S1 Core Loop — COMPLETE
 
-### POST /tests/generate — Tests Phase of S1
+All four backend steps are wired and tested:
 
-Given a `specId`, loads `suggestedTests` from Postgres, sends them to Claude to expand into Vitest test stubs, persists the result, and returns it. This closes the Tests phase of the S1 Core Loop.
-
-#### New source files
-
-- **`server/generate-tests.js`** — `generateTests(suggestedTests: string[])` calls `claude-sonnet-4-6` with a numbered list of test scenarios. System prompt instructs Claude to return a plain Vitest file (no markdown fences), one `it()` stub per scenario with `expect.fail('not implemented')`. Returns the raw string.
-
-- **`server/spec.js`** — Two DB helpers:
-  - `getSpec(specId)` — `db.select().from(specs).where(eq(specs.id, specId))`, returns row or `null`
-  - `saveGeneratedTests(specId, stubs)` — `db.update(specs).set({ generatedTests: stubs }).where(eq(specs.id, specId)).returning()`, returns updated row
-
-#### Changed files
-
-- **`server/app.js`** — `POST /tests/generate` route added (Clerk-protected, same Bearer token pattern as `/intent`):
-  - 401: missing/invalid token
-  - 400: `specId` missing from body
-  - 404: spec not found in DB
-  - 400: `spec.suggestedTests` is empty array
-  - On success: calls `generateTests` → `saveGeneratedTests` → logs → returns `{ specId, testStubs }` (200)
-  - AI/DB errors return 500
-
-- **`server/db/schema.js`** — added `generatedTests: text('generated_tests')` (nullable, no default)
-
-#### Migration
-
-No drizzle-kit. Column added directly:
-```bash
-docker exec flowstate-db psql -U postgres -d flowstate -c "ALTER TABLE specs ADD COLUMN IF NOT EXISTS generated_tests text;"
+```
+POST /intent          → spec row created; AI returns acceptanceCriteria + suggestedTests
+POST /tests/generate  → Vitest test stubs generated from suggestedTests; persisted as generatedTests
+POST /code/generate   → implementation code generated from intent + criteria + tests; persisted as generatedCode
+POST /pr/summarize    → { title, body } PR description generated from full spec; persisted as prSummary
 ```
 
-#### Tests (29 passing — 11 new)
+All routes: Clerk-protected (Bearer token), 400/404 guards, structured JSON logging, 500 on AI failure.
 
-| File | Tests |
-|---|---|
-| `server/tests/generate-tests.test.js` | returns string with `it(`, includes all scenarios in Claude request |
-| `server/tests/spec.test.js` | getSpec returns row / null; saveGeneratedTests returns updated row |
-| `server/tests/tests-generate.route.test.js` | 200 valid, 401×2, 400 missing specId, 404 not found, 400 empty tests |
+---
 
-Also updated `intent.route.test.js` and `logging.test.js` — both needed two new mocks because `app.js` now imports `generate-tests.js` (Anthropic client at module load) and `spec.js`.
+## What Was Built This Session
+
+### POST /pr/summarize
+
+- **`server/generate-pr.js`** — `generatePR(intent, acceptanceCriteria, testStubs, code)` calls `claude-sonnet-4-6`. System prompt instructs Claude to return `{ "title": string, "body": string }` JSON — no other text. Body has `## Summary`, `## Changes`, `## Test plan` sections.
+
+- **`server/spec.js`** — `savePRSummary(specId, prSummary)` added — same Drizzle UPDATE pattern as previous saves.
+
+- **`server/app.js`** — `POST /pr/summarize` route:
+  - 401: missing/invalid token
+  - 400: `specId` missing
+  - 404: spec not found
+  - 400: `spec.generatedCode` is null (code phase not yet run)
+  - On success: `generatePR` → `savePRSummary` → log → return `{ specId, prSummary }` (200)
+
+- **`server/db/schema.js`** — added `prSummary: jsonb('pr_summary')` (nullable)
+
+Migration: `docker exec flowstate-db psql -U postgres -d flowstate -c "ALTER TABLE specs ADD COLUMN IF NOT EXISTS pr_summary jsonb;"`
+
+### POST /code/generate (previous step, same session)
+
+- **`server/generate-code.js`** — `generateCode(intent, acceptanceCriteria, testStubs)` → plain code string (no fences). Formats a structured user message: intent + numbered criteria + test stubs.
+
+- **`server/spec.js`** — `saveGeneratedCode(specId, code)` — Drizzle UPDATE.
+
+- **`server/db/schema.js`** — `generatedCode: text('generated_code')` (nullable).
+
+Migration: `docker exec flowstate-db psql -U postgres -d flowstate -c "ALTER TABLE specs ADD COLUMN IF NOT EXISTS generated_code text;"`
+
+---
+
+## Full Schema (specs table)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `intent` | text | user's feature intent |
+| `type` | text | default `'text'` |
+| `status` | text | default `'pending'` |
+| `acceptance_criteria` | jsonb | default `[]` — set at insert but NOT updated after AI; always `[]` in DB |
+| `suggested_tests` | jsonb | default `[]` — same, NOT persisted after AI |
+| `user_id` | text | Clerk userId from token |
+| `generated_tests` | text | set by POST /tests/generate |
+| `generated_code` | text | set by POST /code/generate |
+| `pr_summary` | jsonb | `{ title, body }` set by POST /pr/summarize |
+| `created_at` | timestamp | defaultNow() |
+
+**Important:** `acceptanceCriteria` and `suggestedTests` from the AI are returned in the POST /intent response but never written back to the DB — they stay as `[]`. When `/code/generate` calls `generateCode(spec.intent, spec.acceptanceCriteria, ...)`, `spec.acceptanceCriteria` is always `[]`. This is a known gap — fixing it would mean updating the spec row after the AI call in POST /intent.
+
+---
+
+## Source File Map
+
+| File | Exports | Purpose |
+|---|---|---|
+| `server/intent.js` | `createSpec` | INSERT new spec row |
+| `server/ai.js` | `generateSpec` | Anthropic → `{ acceptanceCriteria, suggestedTests }` |
+| `server/generate-tests.js` | `generateTests` | Anthropic → Vitest file string |
+| `server/generate-code.js` | `generateCode` | Anthropic → implementation code string |
+| `server/generate-pr.js` | `generatePR` | Anthropic → `{ title, body }` JSON |
+| `server/spec.js` | `getSpec`, `saveGeneratedTests`, `saveGeneratedCode`, `savePRSummary` | DB SELECT/UPDATE |
+| `server/app.js` | default Hono app | all 4 routes + auth |
+| `server/logger.js` | `log` | structured JSON to stdout |
+| `server/db/schema.js` | `specs` | Drizzle table definition |
+| `server/db/index.js` | `db`, `specs` | Drizzle client via postgres-js |
 
 ---
 
 ## Critical Mock Patterns
 
-### Drizzle INSERT chain (intent.route.test.js, logging.test.js)
-```js
-const mockDbValues = vi.hoisted(() => vi.fn())
-const mockDbInsert = vi.hoisted(() => vi.fn())
+### Rule: any new test file that imports app.js needs ALL of these mocks
 
-vi.mock('../db/index.js', () => ({
-  db: { insert: mockDbInsert },
-  specs: {},
-}))
-
-// in beforeEach:
-mockDbInsert.mockReturnValue({ values: mockDbValues })
-mockDbValues.mockImplementation((vals) => ({
-  returning: () => Promise.resolve([{
-    id: 'test-uuid', type: 'text', status: 'pending',
-    acceptanceCriteria: [], suggestedTests: [], userId: null,
-    createdAt: new Date('2026-05-04'), ...vals,
-  }]),
-}))
-```
-
-### Drizzle SELECT chain (spec.test.js)
-```js
-const mockDbSelect = vi.hoisted(() => vi.fn())
-const mockDbFrom = vi.hoisted(() => vi.fn())
-const mockDbWhere = vi.hoisted(() => vi.fn())
-
-vi.mock('../db/index.js', () => ({
-  db: { select: mockDbSelect, update: mockDbUpdate },
-  specs: {},
-}))
-
-// in beforeEach:
-mockDbSelect.mockReturnValue({ from: mockDbFrom })
-mockDbFrom.mockReturnValue({ where: mockDbWhere })
-mockDbWhere.mockResolvedValue([{ ...row }])  // or [] for not-found
-```
-
-### Drizzle UPDATE chain (spec.test.js)
-```js
-const mockDbUpdate = vi.hoisted(() => vi.fn())
-const mockDbUpdateSet = vi.hoisted(() => vi.fn())
-const mockDbUpdateWhere = vi.hoisted(() => vi.fn())
-const mockDbUpdateReturning = vi.hoisted(() => vi.fn())
-
-// in beforeEach:
-mockDbUpdate.mockReturnValue({ set: mockDbUpdateSet })
-mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere })
-mockDbUpdateWhere.mockReturnValue({ returning: mockDbUpdateReturning })
-mockDbUpdateReturning.mockResolvedValue([{ ...updatedRow }])
-```
-
-### Clerk backend mock (all files importing app.js)
 ```js
 const mockVerifyToken = vi.hoisted(() => vi.fn())
 
 vi.mock('@clerk/backend', () => ({
   createClerkClient: () => ({ verifyToken: mockVerifyToken }),
 }))
-
-// in beforeEach:
-mockVerifyToken.mockResolvedValue({ sub: 'user_test' })
-```
-
-### Any new test file that imports app.js needs ALL of these mocks
-```js
 vi.mock('../db/index.js', () => ({ db: { insert: vi.fn() }, specs: {} }))
 vi.mock('../ai.js', () => ({ generateSpec: vi.fn() }))
 vi.mock('../generate-tests.js', () => ({ generateTests: vi.fn() }))
-vi.mock('../spec.js', () => ({ getSpec: vi.fn(), saveGeneratedTests: vi.fn() }))
-vi.mock('@clerk/backend', () => ({ createClerkClient: () => ({ verifyToken: mockVerifyToken }) }))
-```
-`app.js` instantiates `Anthropic` (via `generate-tests.js`) and `postgres` (via `db/index.js`) at module load — without these mocks the test blows up in CI with "browser-like environment" or DB connection errors.
-
-### Clerk React mock (frontend tests)
-```js
-const mockGetToken = vi.hoisted(() => vi.fn())
-
-vi.mock('@clerk/clerk-react', () => ({
-  useAuth: () => ({ getToken: mockGetToken }),
+vi.mock('../generate-code.js', () => ({ generateCode: vi.fn() }))
+vi.mock('../generate-pr.js', () => ({ generatePR: vi.fn() }))
+vi.mock('../spec.js', () => ({
+  getSpec: vi.fn(),
+  saveGeneratedTests: vi.fn(),
+  saveGeneratedCode: vi.fn(),
+  savePRSummary: vi.fn(),
 }))
+```
+
+`app.js` creates an `Anthropic()` instance (×3, via generate-*.js) and a `postgres()` connection (via db/index.js) at module load. Without all these mocks, tests blow up with "browser-like environment" or DB connection errors in CI.
+
+### Drizzle chain mocks
+
+**INSERT** (`intent.route.test.js`, `logging.test.js`):
+```js
+mockDbInsert.mockReturnValue({ values: mockDbValues })
+mockDbValues.mockImplementation((vals) => ({
+  returning: () => Promise.resolve([{ id: 'test-uuid', type: 'text', status: 'pending',
+    acceptanceCriteria: [], suggestedTests: [], userId: null,
+    createdAt: new Date('2026-05-04'), ...vals }]),
+}))
+```
+
+**SELECT** (`spec.test.js`):
+```js
+mockDbSelect.mockReturnValue({ from: mockDbFrom })
+mockDbFrom.mockReturnValue({ where: mockDbWhere })
+mockDbWhere.mockResolvedValue([{ ...row }])  // [] for not-found → null
+```
+
+**UPDATE** (`spec.test.js`):
+```js
+mockDbUpdate.mockReturnValue({ set: mockDbUpdateSet })
+mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere })
+mockDbUpdateWhere.mockReturnValue({ returning: mockDbUpdateReturning })
+mockDbUpdateReturning.mockResolvedValue([{ ...updatedRow }])
+```
+
+### Route test pattern (spec.js + AI module mocked directly)
+
+```js
+const mockGetSpec = vi.hoisted(() => vi.fn())
+const mockSaveX = vi.hoisted(() => vi.fn())
+const mockGenerateX = vi.hoisted(() => vi.fn())
+
+vi.mock('../spec.js', () => ({ getSpec: mockGetSpec, saveX: mockSaveX, ... }))
+vi.mock('../generate-x.js', () => ({ generateX: mockGenerateX }))
 
 // in beforeEach:
-mockGetToken.mockResolvedValue('test-token')
+mockGetSpec.mockResolvedValue(VALID_SPEC)
+mockGenerateX.mockResolvedValue(RESULT)
+mockSaveX.mockResolvedValue({ ...VALID_SPEC, field: RESULT })
 ```
+
+---
+
+## Test Suite
+
+**50 tests, 12 files, all passing.**
+
+| File | Count | Covers |
+|---|---|---|
+| `server/tests/intent.route.test.js` | 6 | POST /intent — 201, 400×2, 401×2, AI fields |
+| `server/tests/logging.test.js` | 5 | structured log shape, code truncation |
+| `server/tests/ai.test.js` | 2 | generateSpec — arrays, intent in request |
+| `server/tests/generate-tests.test.js` | 2 | generateTests — string, scenarios in request |
+| `server/tests/generate-code.test.js` | 4 | generateCode — string, intent/criteria/stubs in request |
+| `server/tests/generate-pr.test.js` | 3 | generatePR — title+body, intent+code in request |
+| `server/tests/spec.test.js` | 5 | getSpec (found/null), saveGeneratedTests, saveGeneratedCode, savePRSummary |
+| `server/tests/tests-generate.route.test.js` | 6 | POST /tests/generate — 200, 401×2, 400×2, 404 |
+| `server/tests/code-generate.route.test.js` | 6 | POST /code/generate — 200, 401×2, 400×2, 404 |
+| `server/tests/pr-summarize.route.test.js` | 6 | POST /pr/summarize — 200, 401×2, 400×2, 404 |
+| `src/tests/IntentInput.test.jsx` | 2 | renders, POSTs with Authorization header |
+| `src/tests/setup.js` | 0 | setup only |
 
 ---
 
@@ -143,35 +182,21 @@ mockGetToken.mockResolvedValue('test-token')
 | `CLERK_SECRET_KEY` | `server/.env` | Backend token verification |
 | `VITE_CLERK_PUBLISHABLE_KEY` | `.env` (root) | Frontend ClerkProvider |
 
-Neither `.env` file is committed. CI doesn't need them — all external calls are mocked.
-
-Docker container: `flowstate-db` (postgres image).
-
----
-
-## Lessons Learned This Session
-
-**1. Any new file that creates an Anthropic client or Postgres client at module load must be mocked in every test file that imports `app.js`.**
-`app.js` imports grow as routes are added. Each new route's service file may have module-level side effects (Anthropic SDK throws in jsdom; postgres tries to connect). The complete mock list at the bottom of the "Critical Mock Patterns" section above must be kept current as new service files are added.
-
-**2. Drizzle SELECT and UPDATE chains need separate hoisted mocks for each step.**
-Unlike INSERT (which returns a plain object with `.returning()` as a non-mock function), SELECT and UPDATE chains need every step to be a `vi.hoisted` fn so you can vary return values per test (e.g., return `[]` for the 404 case). See the chain patterns above.
-
-**3. Skip drizzle-kit for column additions — use `docker exec psql ALTER TABLE IF NOT EXISTS` directly.**
-Faster and avoids generating a migration file for a simple nullable column add.
-
----
-
-## What's Next (S1 remaining)
-
-1. **Code generation step** — `POST /code/generate`: accepts `specId`, loads `generatedTests` from the spec, calls Claude to generate implementation that would make those tests pass, persists and returns the result.
-2. **PR summary step** — `POST /pr/summarize`: bundles spec + tests + code into a reviewed PR description object.
+Docker container: `flowstate-db` (postgres image). Neither `.env` is committed; CI mocks all external calls.
 
 ---
 
 ## Repo State
 
-- Branch: `main`, all work committed (`74adf7c`)
-- Tests: 8 files, 29 tests, all passing
-- CI: should be green (no new packages installed)
-- Local DB: `flowstate-db` container, `specs` table has `generated_tests` column
+- Branch: `main`, all work committed (`824c5dc`)
+- Tests: 12 files, 50 tests, all passing
+- CI: green (no new packages installed this session)
+- Local DB: `flowstate-db` container, `specs` table has all columns through `pr_summary`
+
+## What's Next
+
+S1 backend is complete. Remaining work is frontend and integration:
+
+1. **Wire the S1 loop in the frontend** — UI to step through intent → tests → code → PR, displaying each result and allowing the user to advance to the next step
+2. **Persist acceptanceCriteria + suggestedTests** — POST /intent currently returns them in the response but never writes them back to the DB; fix so subsequent steps can use them
+3. **Status field** — update `spec.status` as the loop progresses (`pending` → `tests-generated` → `code-generated` → `pr-ready`)
