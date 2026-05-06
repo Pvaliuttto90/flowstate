@@ -4,9 +4,9 @@ const client = new Anthropic()
 
 const SYSTEM_PROMPT = `You are a senior software engineer. Given a feature intent, acceptance criteria, and failing Vitest tests, write the minimal implementation code that makes those tests pass. Output only the code — no markdown fences, no explanation.`
 
-export async function generateCode(intent, acceptanceCriteria, testStubs) {
+export async function generateCode(solution, acceptanceCriteria, testStubs) {
   const userMessage = [
-    `Intent: ${intent}`,
+    `Solution: ${solution}`,
     ``,
     `Acceptance criteria:`,
     ...acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`),

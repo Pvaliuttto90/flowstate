@@ -33,7 +33,7 @@ describe('generatePR', () => {
     expect(result.body.length).toBeGreaterThan(0)
   })
 
-  it('includes the intent in the Claude request', async () => {
+  it('includes the solution in the Claude request', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: JSON.stringify({ title: 'x', body: 'y' }) }],
     })

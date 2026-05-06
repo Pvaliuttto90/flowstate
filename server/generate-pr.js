@@ -8,9 +8,9 @@ const SYSTEM_PROMPT = `You are a senior software engineer writing a GitHub pull 
   "body": "markdown PR description with ## Summary, ## Changes, and ## Test plan sections"
 }`
 
-export async function generatePR(intent, acceptanceCriteria, testStubs, code) {
+export async function generatePR(solution, acceptanceCriteria, testStubs, code) {
   const userMessage = [
-    `Intent: ${intent}`,
+    `Solution: ${solution}`,
     ``,
     `Acceptance criteria:`,
     ...acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`),

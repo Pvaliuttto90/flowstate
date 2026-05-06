@@ -30,28 +30,28 @@ describe('Intent → Spec', () => {
   })
 
   it('inserts the spec into the database and returns the saved row', async () => {
-    const intent = 'Add a login page with email and password fields'
+    const solution = 'Add a login page with email and password fields'
 
-    const spec = await createSpec(intent)
+    const spec = await createSpec({ solution, outcome: 'Increase retention', opportunity: 'Users churn early' })
 
     expect(mockInsert).toHaveBeenCalledOnce()
     expect(spec).toMatchObject({
       id: expect.any(String),
-      intent,
+      solution,
       status: 'pending',
       createdAt: expect.any(Date),
     })
   })
 
-  it('includes the intent in the inserted row', async () => {
-    await createSpec('Build a dashboard')
+  it('includes the solution in the inserted row', async () => {
+    await createSpec({ solution: 'Build a dashboard' })
 
     const [insertedValues] = mockValues.mock.calls[0]
-    expect(insertedValues.intent).toBe('Build a dashboard')
+    expect(insertedValues.solution).toBe('Build a dashboard')
   })
 
-  it('rejects an empty intent without touching the database', async () => {
-    await expect(createSpec('')).rejects.toThrow('Intent must not be empty')
+  it('rejects an empty solution without touching the database', async () => {
+    await expect(createSpec({ solution: '' })).rejects.toThrow('Solution must not be empty')
     expect(mockInsert).not.toHaveBeenCalled()
   })
 })

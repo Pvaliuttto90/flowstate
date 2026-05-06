@@ -35,7 +35,12 @@ const PR_SUMMARY = { title: 'Add login page', body: '## Summary\nImplements logi
 
 const VALID_SPEC = {
   id: 'spec-uuid',
-  intent: 'Add a login page',
+  solution: 'Add a login page',
+  outcome: 'Increase user retention',
+  opportunity: 'Users forget to return after first visit',
+  hypothesis: null,
+  successMetric: null,
+  result: null,
   type: 'text',
   status: 'pending',
   acceptanceCriteria: ['User can log in'],

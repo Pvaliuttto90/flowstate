@@ -27,15 +27,15 @@ app.post('/intent', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const { intent, code } = await c.req.json()
+  const { solution, outcome, opportunity, hypothesis, successMetric, code } = await c.req.json()
   const truncated = code !== undefined ? { code: code.slice(0, 200) } : {}
   try {
-    const spec = await createSpec(intent, { userId })
-    const aiDetails = await generateSpec(intent)
-    log({ level: 'info', intent, ...truncated, specId: spec.id, status: spec.status })
+    const spec = await createSpec({ solution, outcome, opportunity, hypothesis, successMetric }, { userId })
+    const aiDetails = await generateSpec(outcome, opportunity, solution)
+    log({ level: 'info', solution, ...truncated, specId: spec.id, status: spec.status })
     return c.json({ ...spec, ...aiDetails }, 201)
   } catch (err) {
-    log({ level: 'error', intent, ...truncated, error: err.message })
+    log({ level: 'error', solution, ...truncated, error: err.message })
     return c.json({ error: err.message }, 400)
   }
 })
@@ -94,7 +94,7 @@ app.post('/code/generate', async (c) => {
   }
 
   try {
-    const code = await generateCode(spec.intent, spec.acceptanceCriteria, spec.generatedTests)
+    const code = await generateCode(spec.solution, spec.acceptanceCriteria, spec.generatedTests)
     await saveGeneratedCode(specId, code)
     log({ level: 'info', specId, action: 'generate-code' })
     return c.json({ specId, code }, 200)
@@ -126,7 +126,7 @@ app.post('/pr/summarize', async (c) => {
   }
 
   try {
-    const prSummary = await generatePR(spec.intent, spec.acceptanceCriteria, spec.generatedTests, spec.generatedCode)
+    const prSummary = await generatePR(spec.solution, spec.acceptanceCriteria, spec.generatedTests, spec.generatedCode)
     await savePRSummary(specId, prSummary)
     log({ level: 'info', specId, action: 'pr-summarize' })
     return c.json({ specId, prSummary }, 200)

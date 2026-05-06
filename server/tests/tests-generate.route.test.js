@@ -36,12 +36,19 @@ import app from '../app.js'
 
 const VALID_SPEC = {
   id: 'spec-uuid',
-  intent: 'Add a login page',
+  solution: 'Add a login page',
+  outcome: 'Increase user retention',
+  opportunity: 'Users forget to return after first visit',
+  hypothesis: null,
+  successMetric: null,
+  result: null,
   type: 'text',
   status: 'pending',
   acceptanceCriteria: ['User can log in'],
   suggestedTests: ['Test successful login', 'Test failed login'],
   generatedTests: null,
+  generatedCode: null,
+  prSummary: null,
   userId: 'user_test',
   createdAt: new Date('2026-05-04'),
 }

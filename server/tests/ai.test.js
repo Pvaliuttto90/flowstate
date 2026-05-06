@@ -15,7 +15,7 @@ describe('generateSpec', () => {
     vi.clearAllMocks()
   })
 
-  it('returns acceptanceCriteria and suggestedTests arrays for a valid intent', async () => {
+  it('returns acceptanceCriteria and suggestedTests arrays for a valid spec', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{
         type: 'text',
@@ -26,7 +26,7 @@ describe('generateSpec', () => {
       }],
     })
 
-    const result = await generateSpec('Add a login page')
+    const result = await generateSpec('increase user retention', 'users forget to return', 'Add a login page')
 
     expect(result.acceptanceCriteria).toBeInstanceOf(Array)
     expect(result.acceptanceCriteria.length).toBeGreaterThan(0)
@@ -34,7 +34,7 @@ describe('generateSpec', () => {
     expect(result.suggestedTests.length).toBeGreaterThan(0)
   })
 
-  it('includes the intent in the Claude request', async () => {
+  it('includes the outcome, opportunity, and solution in the Claude request', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{
         type: 'text',
@@ -45,10 +45,12 @@ describe('generateSpec', () => {
       }],
     })
 
-    await generateSpec('Build a dashboard')
+    await generateSpec('increase retention', 'users forget to return', 'Build a dashboard')
 
     expect(mockCreate).toHaveBeenCalledOnce()
     const { messages } = mockCreate.mock.calls[0][0]
+    expect(messages[0].content).toContain('increase retention')
+    expect(messages[0].content).toContain('users forget to return')
     expect(messages[0].content).toContain('Build a dashboard')
   })
 })

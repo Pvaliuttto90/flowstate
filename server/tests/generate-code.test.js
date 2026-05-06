@@ -26,7 +26,7 @@ describe('generateCode', () => {
     expect(result.length).toBeGreaterThan(0)
   })
 
-  it('includes the intent in the Claude request', async () => {
+  it('includes the solution in the Claude request', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'code' }],
     })

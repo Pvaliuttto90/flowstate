@@ -53,11 +53,11 @@ describe('POST /intent — structured logging', () => {
     spy.mockRestore()
   })
 
-  it('logs intent, spec id, and status on success', async () => {
+  it('logs solution, spec id, and status on success', async () => {
     await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: 'Add a dashboard page' }),
+      body: JSON.stringify({ solution: 'Add a dashboard page', outcome: 'Reduce support load', opportunity: 'Users cannot self-serve' }),
     })
 
     expect(spy).toHaveBeenCalledOnce()
@@ -65,18 +65,18 @@ describe('POST /intent — structured logging', () => {
     expect(entry).toMatchObject({
       level: 'info',
       timestamp: expect.any(String),
-      intent: 'Add a dashboard page',
+      solution: 'Add a dashboard page',
       specId: expect.any(String),
       status: 'pending',
     })
     expect(new Date(entry.timestamp).getTime()).not.toBeNaN()
   })
 
-  it('logs intent and full error context on failure', async () => {
+  it('logs solution and full error context on failure', async () => {
     await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: '' }),
+      body: JSON.stringify({ solution: '' }),
     })
 
     expect(spy).toHaveBeenCalledOnce()
@@ -84,8 +84,8 @@ describe('POST /intent — structured logging', () => {
     expect(entry).toMatchObject({
       level: 'error',
       timestamp: expect.any(String),
-      intent: '',
-      error: 'Intent must not be empty',
+      solution: '',
+      error: 'Solution must not be empty',
     })
     expect(new Date(entry.timestamp).getTime()).not.toBeNaN()
   })
@@ -96,14 +96,14 @@ describe('POST /intent — structured logging', () => {
     await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: 'Add a login page', code }),
+      body: JSON.stringify({ solution: 'Add a login page', outcome: 'Increase retention', opportunity: 'Users churn early', code }),
     })
 
     expect(spy).toHaveBeenCalledOnce()
     const entry = JSON.parse(spy.mock.calls[0][0])
     expect(entry).toMatchObject({
       level: 'info',
-      intent: 'Add a login page',
+      solution: 'Add a login page',
       code: 'x'.repeat(200),
       specId: expect.any(String),
       status: 'pending',
@@ -116,7 +116,7 @@ describe('POST /intent — structured logging', () => {
     await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: 'Add a login page', code }),
+      body: JSON.stringify({ solution: 'Add a login page', code }),
     })
 
     const entry = JSON.parse(spy.mock.calls[0][0])
@@ -129,16 +129,16 @@ describe('POST /intent — structured logging', () => {
     await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: '', code }),
+      body: JSON.stringify({ solution: '', code }),
     })
 
     expect(spy).toHaveBeenCalledOnce()
     const entry = JSON.parse(spy.mock.calls[0][0])
     expect(entry).toMatchObject({
       level: 'error',
-      intent: '',
+      solution: '',
       code,
-      error: 'Intent must not be empty',
+      error: 'Solution must not be empty',
     })
   })
 })

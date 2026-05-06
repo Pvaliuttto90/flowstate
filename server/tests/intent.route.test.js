@@ -46,36 +46,40 @@ describe('POST /intent', () => {
     }))
   })
 
-  it('returns a spec for a valid intent', async () => {
+  it('returns a spec for a valid solution', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: 'Add a login page with email and password' }),
+      body: JSON.stringify({
+        solution: 'Add a login page with email and password',
+        outcome: 'Increase user retention',
+        opportunity: 'Users forget to return after first visit',
+      }),
     })
 
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body).toMatchObject({
       id: expect.any(String),
-      intent: 'Add a login page with email and password',
+      solution: 'Add a login page with email and password',
       status: 'pending',
       createdAt: expect.any(String),
     })
   })
 
-  it('returns 400 when intent is empty', async () => {
+  it('returns 400 when solution is empty', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: '' }),
+      body: JSON.stringify({ solution: '' }),
     })
 
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body).toMatchObject({ error: 'Intent must not be empty' })
+    expect(body).toMatchObject({ error: 'Solution must not be empty' })
   })
 
-  it('returns 400 when intent field is missing', async () => {
+  it('returns 400 when solution field is missing', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
@@ -84,14 +88,18 @@ describe('POST /intent', () => {
 
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body).toMatchObject({ error: 'Intent must not be empty' })
+    expect(body).toMatchObject({ error: 'Solution must not be empty' })
   })
 
   it('response includes acceptanceCriteria and suggestedTests from the AI', async () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
-      body: JSON.stringify({ intent: 'Add a dashboard page' }),
+      body: JSON.stringify({
+        solution: 'Add a dashboard page',
+        outcome: 'Reduce support load',
+        opportunity: 'Users cannot self-serve metrics',
+      }),
     })
 
     expect(res.status).toBe(201)
@@ -106,7 +114,7 @@ describe('POST /intent', () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ intent: 'Add a login page' }),
+      body: JSON.stringify({ solution: 'Add a login page' }),
     })
 
     expect(res.status).toBe(401)
@@ -117,7 +125,7 @@ describe('POST /intent', () => {
     const res = await app.request('/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer bad-token' },
-      body: JSON.stringify({ intent: 'Add a login page' }),
+      body: JSON.stringify({ solution: 'Add a login page' }),
     })
 
     expect(res.status).toBe(401)

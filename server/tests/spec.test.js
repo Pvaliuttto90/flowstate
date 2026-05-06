@@ -20,12 +20,19 @@ import { getSpec, saveGeneratedTests, saveGeneratedCode, savePRSummary } from '.
 
 const SPEC = {
   id: 'spec-uuid',
-  intent: 'Add login page',
+  solution: 'Add login page',
+  outcome: 'Increase retention',
+  opportunity: 'Users forget to log in',
+  hypothesis: null,
+  successMetric: null,
+  result: null,
   type: 'text',
   status: 'pending',
   acceptanceCriteria: [],
   suggestedTests: ['Test login'],
   generatedTests: null,
+  generatedCode: null,
+  prSummary: null,
   userId: 'user_test',
   createdAt: new Date('2026-05-04'),
 }
@@ -42,7 +49,7 @@ describe('getSpec', () => {
 
     const result = await getSpec('spec-uuid')
 
-    expect(result).toMatchObject({ id: 'spec-uuid', intent: 'Add login page' })
+    expect(result).toMatchObject({ id: 'spec-uuid', solution: 'Add login page' })
   })
 
   it('returns null when spec is not found', async () => {
